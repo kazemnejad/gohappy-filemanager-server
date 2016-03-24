@@ -23,15 +23,13 @@ class User(Base):
         return '<User %r>' % (self.username)
 
     def set_password(self, password):
-        hashed = pwd_context.encrypt(password)
-
-        self.password = hashed
+        self.password = pwd_context.encrypt(password)
 
     def verify_password(self, password):
         return pwd_context.verify(password, self.password)
 
     def generate_auth_token(self):
-        s = Serializer(config.SECRET_KEY, expires_in=150)
+        s = Serializer(config.SECRET_KEY, expires_in=config.TOKEN_EXPIRATION_TIME)
         return s.dumps({'id': self.id})
 
     @staticmethod
