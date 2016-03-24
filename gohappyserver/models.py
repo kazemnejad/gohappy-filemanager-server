@@ -20,7 +20,7 @@ class User(Base):
         self.set_password(password)
 
     def __repr__(self):
-        return '<User %r>' % (self.username)
+        return '<User %r>' % self.username
 
     def set_password(self, password):
         self.password = pwd_context.encrypt(password)
