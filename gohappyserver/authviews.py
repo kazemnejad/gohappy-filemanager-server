@@ -1,4 +1,4 @@
-from flask import request, jsonify, g
+from flask import request, jsonify, g, render_template
 from flask import abort
 
 from gohappyserver.database import db_session
@@ -16,7 +16,7 @@ class AuthResponceCode:
 
 @app.route("/")
 def main_page():
-    return "Hello World"
+    return render_template("index.html")
 
 
 @app.route("/auth/login", methods=['POST'])
@@ -32,8 +32,6 @@ def login():
     else:
         response["result"] = AuthResponceCode.SUCCESS
         response["token"] = user.generate_auth_token().decode('ascii')
-
-        g.user = user
 
     return jsonify(response), 200,
 
@@ -59,7 +57,6 @@ def register():
         response["id"] = user.id
         response["token"] = user.generate_auth_token().decode('ascii')
 
-        g.user = user
         print response
 
     return jsonify(response), 200,
