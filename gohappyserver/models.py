@@ -1,10 +1,10 @@
 from itsdangerous import TimedJSONWebSignatureSerializer as Serializer, SignatureExpired, BadSignature
 from passlib.apps import custom_app_context as pwd_context
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 
 from gohappyserver import config
-from gohappyserver.database import Base
+from gohappyserver.database import Base, db_session
 
 
 class User(Base):
@@ -13,7 +13,7 @@ class User(Base):
     username = Column("username", String(50), unique=True, nullable=False)
     password = Column("password", String(200), nullable=False)
 
-    socket_id = Column("socket_id", String(200), nullable=True)
+    socket_id = Column("socket_id", String(200), unique=True, nullable=True)
 
     def __init__(self, username=None, password=None):
         self.username = username
@@ -32,8 +32,11 @@ class User(Base):
         s = Serializer(config.SECRET_KEY, expires_in=config.TOKEN_EXPIRATION_TIME)
         return s.dumps({'id': self.id})
 
+    def attach_new_socket(self, sid):
+        self.socket_id = sid
+
     @staticmethod
-    def verify_auth_token(token):
+    def get_user_by_auth_token(token):
         s = Serializer(config.SECRET_KEY)
         try:
             data = s.loads(token)
@@ -45,13 +48,30 @@ class User(Base):
         user = User.query.get(data['id'])
         return user
 
+    @staticmethod
+    def verify_auth_token(token):
+        s = Serializer(config.SECRET_KEY)
+        try:
+            data = s.loads(token)
+        except SignatureExpired:
+            return False  # valid token, but expired
+        except BadSignature:
+            return False  # invalid token
+
+        return 'id' in data
+
 
 class Session(Base):
     __tablename__ = 'sessions'
     id = Column("id", Integer, primary_key=True, autoincrement=True)
-    uuid = Column("uuid", String(100), unique=True)
+    uuid = Column("uuid", String(100), unique=True, nullable=True)
+    enabled = Column("enabled", Boolean, default=False)
+    closed = Column("closed", Boolean, default=False)
     explorer_id = Column("explorer_id", Integer, ForeignKey("users.id"), nullable=False)
     source_id = Column("source_id", Integer, ForeignKey("users.id"), nullable=False)
 
     explorer = relationship("User", foreign_keys=[explorer_id])
     source = relationship("User", foreign_keys=[source_id])
+
+    def __init__(self):
+        pass
