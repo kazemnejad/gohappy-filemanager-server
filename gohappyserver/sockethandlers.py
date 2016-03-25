@@ -28,6 +28,7 @@ def handle_new_connection(data):
     emit("new_connection_established", {"result": ResponseCode.SUCCESSFUL}, room=sid)
 
 
+
 @socketio.on("disconnect")
 def handle_disconnect():
     sid = request.sid
