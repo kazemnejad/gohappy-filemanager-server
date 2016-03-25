@@ -3,8 +3,8 @@ from flask import request
 
 from flask.ext.socketio import disconnect, emit
 
-from events import ServerEvents, ClientEvents, ExplorerEvents, SourceEvents
 from gohappyserver.database import db_session
+from gohappyserver.events import ServerEvents, ClientEvents, ExplorerEvents, SourceEvents
 from gohappyserver.models import User, Session
 from gohappyserver.server import socketio
 from gohappyserver.status import ResponseCode, AuthenticationResponse, ExplorationResponse
