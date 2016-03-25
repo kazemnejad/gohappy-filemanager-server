@@ -26,3 +26,22 @@ def handle_new_connection(data):
     db_session.commit()
 
     emit("new_connection_established", {"result": ResponseCode.SUCCESSFUL}, room=sid)
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    sid = request.sid
+    if not sid: return
+
+    user = User.query.filter_by(socket_id=sid).first()
+    if user:
+        user.attach_new_socket(None)
+        db_session.commit()
+
+
+def simple_response(event, resultCode, message, sid):
+    emit(
+            event,
+            {"result": resultCode, "message": message},
+            room=sid
+    )
