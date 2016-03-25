@@ -11,3 +11,12 @@ class AuthenticationResponse:
     PERMISSION_DENIED = 32
 
 
+class ExplorationResponse:
+    SOURCE_IS_OFFLINE = 40
+    EXPLORER_IS_OFFLINE = 41
+
+    ANSWER_PERMISSION_GRANTED = 41
+    ANSWER_PERMISSION_DENIED = 42
+
+    INVALID_ANSWER = 43
+    INVALID_SESSION = 44
