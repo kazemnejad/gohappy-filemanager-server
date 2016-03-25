@@ -3,13 +3,14 @@ from flask import request
 
 from flask.ext.socketio import disconnect, emit
 
+from events import ServerEvents, ClientEvents, ExplorerEvents, SourceEvents
 from gohappyserver.database import db_session
 from gohappyserver.models import User, Session
 from gohappyserver.server import socketio
 from gohappyserver.status import ResponseCode, AuthenticationResponse, ExplorationResponse
 
 
-@socketio.on("ask_for_new_connection")
+@socketio.on(ServerEvents.NEW_CONNECTION)
 def handle_new_connection(data):
     if data is None or "token" not in data:
         disconnect()
@@ -26,34 +27,34 @@ def handle_new_connection(data):
     user.attach_new_socket(sid)
     db_session.commit()
 
-    emit("new_connection_established", {"result": ResponseCode.SUCCESSFUL}, room=sid)
+    emit(ClientEvents.CONNECTION_ESTABLISHED, {"result": ResponseCode.SUCCESSFUL}, room=sid)
 
 
-@socketio.on("start_new_exploration")
+@socketio.on(ServerEvents.NEW_EXPLORATION)
 def handle_start_new_exploration(data):
     sid = request.sid
 
     if data is None \
             or "token" not in data \
             or "source" not in data:
-        simple_response("start_new_exploration_result", ResponseCode.FAILED,
+        simple_response(ExplorerEvents.NEW_EXPLORATION_RESULT, ResponseCode.FAILED,
                         ResponseCode.BAD_REQUEST, sid)
         return
 
     explorer = User.get_user_by_auth_token(data.get("token", ""))
     source = User.query.filter_by(username=data.get("source", "")).first()
     if explorer is None:
-        simple_response("start_new_exploration_result", ResponseCode.FAILED,
+        simple_response(ExplorerEvents.NEW_EXPLORATION_RESULT, ResponseCode.FAILED,
                         AuthenticationResponse.UN_AUTHENTICATED_USER, sid)
         return
 
     if source is None:
-        simple_response("start_new_exploration_result", ResponseCode.FAILED,
+        simple_response(ExplorerEvents.NEW_EXPLORATION_RESULT, ResponseCode.FAILED,
                         AuthenticationResponse.INVALID_SOURCE, sid)
         return
 
     if source.socket_id is None:
-        simple_response("start_new_exploration_result", ResponseCode.FAILED,
+        simple_response(ExplorerEvents.NEW_EXPLORATION_RESULT, ResponseCode.FAILED,
                         ExplorationResponse.SOURCE_IS_OFFLINE, sid)
         return
 
@@ -67,10 +68,11 @@ def handle_start_new_exploration(data):
     session.enabled = False
     db_session.commit()
 
-    emit("ask_for_permission", {"explorer": explorer.username, "session_id": session.uuid}, room=source.socket_id)
+    emit(SourceEvents.ASK_FOR_PERMISSION, {"explorer": explorer.username, "session_id": session.uuid},
+         room=source.socket_id)
 
 
-@socketio.on("permission_answer")
+@socketio.on(ServerEvents.EXPLORATION_PERMISSION_REQUEST_ANSWER)
 def handle_source_permission_answer(data):
     if data is None \
             or "session_id" not in data \
@@ -94,7 +96,8 @@ def handle_source_permission_answer(data):
 
     answer = data.get("answer")
     if answer not in [ExplorationResponse.ANSWER_PERMISSION_GRANTED, ExplorationResponse.ANSWER_PERMISSION_DENIED]:
-        simple_response("start_new_exploration_result", ResponseCode.FAILED, ExplorationResponse.INVALID_ANSWER,
+        simple_response(ExplorerEvents.NEW_EXPLORATION_RESULT,
+                        ResponseCode.FAILED, ExplorationResponse.INVALID_ANSWER,
                         explorer.socket_id)
         return
 
@@ -113,11 +116,12 @@ def handle_source_permission_answer(data):
     response["answer"] = answer
     response["message"] = answer
 
-    emit("start_new_exploration_result", response, room=explorer.socket_id)
-    emit("exploration_started", {"session_id": session.uuid, "explorer": explorer.username}, room=source.socket_id)
+    emit(ExplorerEvents.NEW_EXPLORATION_RESULT, response, room=explorer.socket_id)
+    emit(SourceEvents.EXPLORATION_STARTED, {"session_id": session.uuid, "explorer": explorer.username},
+         room=source.socket_id)
 
 
-@socketio.on("path_request")
+@socketio.on(ServerEvents.EXPLORATION_PATH_REQUEST)
 def handle_path_request(data):
     sid = request.sid
 
@@ -126,7 +130,7 @@ def handle_path_request(data):
             or "session_id" not in data \
             or "path" not in data \
             or "request_code" in data:
-        simple_response("path_request_response", ResponseCode.FAILED,
+        simple_response(ExplorerEvents.PATH_REQUEST_RESPONSE, ResponseCode.FAILED,
                         ResponseCode.BAD_REQUEST, sid)
         return
 
@@ -135,7 +139,7 @@ def handle_path_request(data):
             or not session.enabled \
             or session.explorer is None \
             or session.source is None:
-        simple_response("path_request_response", ResponseCode.FAILED,
+        simple_response(ExplorerEvents.PATH_REQUEST_RESPONSE, ResponseCode.FAILED,
                         ExplorationResponse.INVALID_SESSION, sid)
         return
 
@@ -144,21 +148,21 @@ def handle_path_request(data):
             or explorer.socket_id is None \
             or explorer.socket_id != sid \
             or session.explorer.socket_id != sid:
-        simple_response("path_request_response", ResponseCode.FAILED,
+        simple_response(ExplorerEvents.PATH_REQUEST_RESPONSE, ResponseCode.FAILED,
                         AuthenticationResponse.UN_AUTHENTICATED_USER, sid)
         return
 
     if session.source.socket_id is None:
-        simple_response("path_request_response", ResponseCode.FAILED,
+        simple_response(ExplorerEvents.PATH_REQUEST_RESPONSE, ResponseCode.FAILED,
                         ExplorationResponse.SOURCE_IS_OFFLINE, sid)
         return
 
-    emit("source_path_request",
+    emit(SourceEvents.PATH_REQUESTED,
          {"request_code": data.get("request_code"), "path": data.get("path"), "session_id": data.get("session_id")},
          room=session.source.socket_id)
 
 
-@socketio.on("path_request_response")
+@socketio.on(ServerEvents.EXPLORATION_PATH_REQUEST_RESPONSE)
 def handle_path_request_response(data):
     sid = request.sid
 
@@ -167,7 +171,7 @@ def handle_path_request_response(data):
             or "request_code" not in data \
             or "session_id" not in data \
             or "response_data" not in data:
-        simple_response("path_request_response_error", ResponseCode.FAILED,
+        simple_response(SourceEvents.PATH_RESPONSE_ERROR, ResponseCode.FAILED,
                         ResponseCode.BAD_REQUEST, sid)
         return
 
@@ -176,7 +180,7 @@ def handle_path_request_response(data):
             or not session.enabled \
             or session.explorer is None \
             or session.source is None:
-        simple_response("path_request_response_error", ResponseCode.FAILED,
+        simple_response(SourceEvents.PATH_RESPONSE_ERROR, ResponseCode.FAILED,
                         ExplorationResponse.INVALID_SESSION, sid)
         return
 
@@ -184,30 +188,30 @@ def handle_path_request_response(data):
     if source.username != session.source.username \
             or source.socket_id is None \
             or source.socket_id != sid:
-        simple_response("path_request_response_error", ResponseCode.FAILED,
+        simple_response(SourceEvents.PATH_RESPONSE_ERROR, ResponseCode.FAILED,
                         AuthenticationResponse.PERMISSION_DENIED, sid)
         return
 
     explorer = session.explorer
     if explorer.socket_id is None:
-        simple_response("path_request_response_error", ResponseCode.FAILED,
+        simple_response(SourceEvents.PATH_RESPONSE_ERROR, ResponseCode.FAILED,
                         ExplorationResponse.EXPLORER_IS_OFFLINE, sid)
         return
 
-    emit("path_response",
+    emit(ExplorerEvents.PATH_REQUEST_RESPONSE,
          {"request_code": data.get("request_code"), "session_id": data.get("session_id"),
           "response_data": data.get("response_data")},
-         room=sid)
+         room=explorer.socket_id)
 
 
-@socketio.on("close_session")
+@socketio.on(ServerEvents.CLOSE_SESSION)
 def handle_close_session(data):
     sid = request.sid
 
     if data is None \
             or "token" not in data \
             or "session_id" not in data:
-        simple_response("close_session_error", ResponseCode.FAILED,
+        simple_response(ClientEvents.SESSION_CLOSE_ERROR, ResponseCode.FAILED,
                         ResponseCode.BAD_REQUEST, sid)
         return
 
@@ -216,26 +220,22 @@ def handle_close_session(data):
             or session.closed \
             or session.source is None \
             or session.explorer is None:
-        simple_response("close_session_error", ResponseCode.FAILED,
+        simple_response(ClientEvents.SESSION_CLOSE_ERROR, ResponseCode.FAILED,
                         ExplorationResponse.INVALID_SESSION, sid)
         return
 
     user = User.get_user_by_auth_token(data.get("token"))
     if user is None \
             or (user.username != session.explorer.username and user.username != session.source.username):
-        simple_response("close_session_error", ResponseCode.FAILED,
+        simple_response(ClientEvents.SESSION_CLOSE_ERROR, ResponseCode.FAILED,
                         AuthenticationResponse.PERMISSION_DENIED, sid)
         return
 
-    session.enabled = False
-    session.closed = True
+    close_session(session)
     db_session.commit()
 
-    emit("session_closed", {"session_id": data.get("session_id")}, room=session.explorer.socket_id)
-    emit("session_closed", {"session_id": data.get("session_id")}, room=session.source.socket_id)
 
-
-@socketio.on("disconnect")
+@socketio.on(ServerEvents.DISCONNECT)
 def handle_disconnect():
     sid = request.sid
     if not sid: return
@@ -243,6 +243,15 @@ def handle_disconnect():
     user = User.query.filter_by(socket_id=sid).first()
     if user:
         user.attach_new_socket(None)
+
+        sessions = Session.query.filter_by(source=user)
+        for session in sessions:
+            close_session(session)
+
+        sessions = Session.query.filter_by(explorer=user)
+        for session in sessions:
+            close_session(session)
+
         db_session.commit()
 
 
@@ -252,3 +261,11 @@ def simple_response(event, resultCode, message, sid):
             {"result": resultCode, "message": message},
             room=sid
     )
+
+
+def close_session(session):
+    session.enabled = False
+    session.closed = True
+
+    emit(ClientEvents.SESSION_CLOSED, {"session_id": session.uuid}, room=session.explorer.socket_id)
+    emit(ClientEvents.SESSION_CLOSED, {"session_id": session.uuid}, room=session.source.socket_id)
