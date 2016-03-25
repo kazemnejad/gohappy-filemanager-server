@@ -200,6 +200,39 @@ def handle_path_request_response(data):
          room=sid)
 
 
+@socketio.on("close_session")
+def handle_close_session(data):
+    sid = request.sid
+
+    if data is None \
+            or "token" not in data \
+            or "session_id" not in data:
+        simple_response("close_session_error", ResponseCode.FAILED,
+                        ResponseCode.BAD_REQUEST, sid)
+        return
+
+    session = Session.query.filter_by(uuid=data.get("session_id")).first()
+    if session is None \
+            or session.closed \
+            or session.source is None \
+            or session.explorer is None:
+        simple_response("close_session_error", ResponseCode.FAILED,
+                        ExplorationResponse.INVALID_SESSION, sid)
+        return
+
+    user = User.get_user_by_auth_token(data.get("token"))
+    if user is None \
+            or (user.username != session.explorer.username and user.username != session.source.username):
+        simple_response("close_session_error", ResponseCode.FAILED,
+                        AuthenticationResponse.PERMISSION_DENIED, sid)
+        return
+
+    session.enabled = False
+    session.closed = True
+    db_session.commit()
+
+    emit("session_closed", {"session_id": data.get("session_id")}, room=session.explorer.socket_id)
+    emit("session_closed", {"session_id": data.get("session_id")}, room=session.source.socket_id)
 
 
 @socketio.on("disconnect")
