@@ -1,11 +1,12 @@
+import hashlib
 from flask import request
 
 from flask.ext.socketio import disconnect, emit
 
 from gohappyserver.database import db_session
-from gohappyserver.models import User
+from gohappyserver.models import User, Session
 from gohappyserver.server import socketio
-from gohappyserver.status import ResponseCode
+from gohappyserver.status import ResponseCode, AuthenticationResponse, ExplorationResponse
 
 
 @socketio.on("ask_for_new_connection")
@@ -27,6 +28,93 @@ def handle_new_connection(data):
 
     emit("new_connection_established", {"result": ResponseCode.SUCCESSFUL}, room=sid)
 
+
+@socketio.on("start_new_exploration")
+def handle_start_new_exploration(data):
+    sid = request.sid
+
+    if data is None \
+            or "token" not in data \
+            or "source" not in data:
+        simple_response("start_new_exploration_result", ResponseCode.FAILED,
+                        ResponseCode.BAD_REQUEST, sid)
+        return
+
+    explorer = User.get_user_by_auth_token(data.get("token", ""))
+    source = User.query.filter_by(username=data.get("source", "")).first()
+    if explorer is None:
+        simple_response("start_new_exploration_result", ResponseCode.FAILED,
+                        AuthenticationResponse.UN_AUTHENTICATED_USER, sid)
+        return
+
+    if source is None:
+        simple_response("start_new_exploration_result", ResponseCode.FAILED,
+                        AuthenticationResponse.INVALID_SOURCE, sid)
+        return
+
+    if source.socket_id is None:
+        simple_response("start_new_exploration_result", ResponseCode.FAILED,
+                        ExplorationResponse.SOURCE_IS_OFFLINE, sid)
+        return
+
+    session = Session()
+    db_session.add(session)
+    db_session.commit()
+
+    session.uuid = hashlib.md5(str(session.id)).hexdigest()
+    session.explorer = explorer
+    session.source = source
+    session.enabled = False
+    db_session.commit()
+
+    emit("ask_for_permission", {"explorer": explorer.username, "session_id": session.uuid}, room=source.socket_id)
+
+
+@socketio.on("permission_answer")
+def handle_source_permission_answer(data):
+    if data is None \
+            or "session_id" not in data \
+            or "token" not in data \
+            or "answer" not in data:
+        return
+
+    session = Session.query.filter_by(uuid=data.get("session_id")).first()
+    if session is None:
+        return
+
+    source = session.source
+    if source is None or source.username != User.get_user_by_auth_token(data.get("token")).username:
+        return
+
+    explorer = session.explorer
+    if explorer is None \
+            or source.socket_id is None \
+            or explorer.socket_id is None:
+        return
+
+    answer = data.get("answer")
+    if answer not in [ExplorationResponse.ANSWER_PERMISSION_GRANTED, ExplorationResponse.ANSWER_PERMISSION_DENIED]:
+        simple_response("start_new_exploration_result", ResponseCode.FAILED, ExplorationResponse.INVALID_ANSWER,
+                        explorer.socket_id)
+        return
+
+    response = {}
+    result = ResponseCode.FAILED
+    session.enabled = False
+    if answer == ExplorationResponse.ANSWER_PERMISSION_GRANTED:
+        result = ResponseCode.SUCCESSFUL
+        session.enabled = True
+
+        response["session_id"] = session.uuid
+        response["source"] = source.username
+
+    db_session.commit()
+    response["result"] = result
+    response["answer"] = answer
+    response["message"] = answer
+
+    emit("start_new_exploration_result", response, room=explorer.socket_id)
+    emit("exploration_started", {"session_id": session.uuid, "explorer": explorer.username}, room=source.socket_id)
 
 
 @socketio.on("disconnect")
