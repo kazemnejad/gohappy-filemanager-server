@@ -158,6 +158,50 @@ def handle_path_request(data):
          room=session.source.socket_id)
 
 
+@socketio.on("path_request_response")
+def handle_path_request_response(data):
+    sid = request.sid
+
+    if data is None \
+            or "token" not in data \
+            or "request_code" not in data \
+            or "session_id" not in data \
+            or "response_data" not in data:
+        simple_response("path_request_response_error", ResponseCode.FAILED,
+                        ResponseCode.BAD_REQUEST, sid)
+        return
+
+    session = Session.query.filter_by(uuid=data.get("session_id")).first()
+    if session is None \
+            or not session.enabled \
+            or session.explorer is None \
+            or session.source is None:
+        simple_response("path_request_response_error", ResponseCode.FAILED,
+                        ExplorationResponse.INVALID_SESSION, sid)
+        return
+
+    source = User.get_user_by_auth_token(data.get("token"))
+    if source.username != session.source.username \
+            or source.socket_id is None \
+            or source.socket_id != sid:
+        simple_response("path_request_response_error", ResponseCode.FAILED,
+                        AuthenticationResponse.PERMISSION_DENIED, sid)
+        return
+
+    explorer = session.explorer
+    if explorer.socket_id is None:
+        simple_response("path_request_response_error", ResponseCode.FAILED,
+                        ExplorationResponse.EXPLORER_IS_OFFLINE, sid)
+        return
+
+    emit("path_response",
+         {"request_code": data.get("request_code"), "session_id": data.get("session_id"),
+          "response_data": data.get("response_data")},
+         room=sid)
+
+
+
+
 @socketio.on("disconnect")
 def handle_disconnect():
     sid = request.sid
