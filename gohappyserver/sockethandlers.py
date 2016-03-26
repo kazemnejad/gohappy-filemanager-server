@@ -10,6 +10,12 @@ from gohappyserver.server import socketio
 from gohappyserver.status import ResponseCode, AuthenticationResponse, ExplorationResponse
 
 
+@socketio.on('connect')
+def test_message():
+    print "manual_pong on sid=" + request.sid
+    emit('manual_pong', {'data': 'got it!'}, room=request.sid)
+
+
 @socketio.on(ServerEvents.NEW_CONNECTION)
 def handle_new_connection(data):
     if data is None or EventFields.TOKEN not in data:

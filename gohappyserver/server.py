@@ -11,8 +11,7 @@ eventlet.monkey_patch()
 app = Flask(__name__)
 
 app.debug = True
-app.secret_key = config.SECRET_KEY
-app.app_context().push()
+app.config['SECRET_KEY'] = config.SECRET_KEY
 socketio = SocketIO(app, async_mode="eventlet", allow_upgrading=True)
 
 import gohappyserver.sockethandlers
