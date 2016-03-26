@@ -1,5 +1,5 @@
-from flask import request, jsonify, g, render_template
 from flask import abort
+from flask import request, jsonify, render_template
 
 from gohappyserver.database import db_session
 from gohappyserver.models import User
@@ -60,3 +60,15 @@ def register():
         print response
 
     return jsonify(response), 200,
+
+
+@app.route("/users/online", methods=["GET"])
+def list_users():
+    token = str(request.headers.get("Authorization")).split(" ")[1]
+
+    if not User.verify_auth_token(token):
+        abort(403)
+
+    online_users = User.query.filter(User.socket_id != None)
+
+    return jsonify(online_users), 200,
