@@ -13,7 +13,8 @@ class User(Base):
     username = Column("username", String(50), unique=True, nullable=False)
     password = Column("password", String(200), nullable=False)
 
-    socket_id = Column("socket_id", String(200), unique=True, nullable=True)
+    socket_id_as_explorer = Column("e_sid", String(200), unique=True, nullable=True)
+    socket_id_as_source = Column("s_sid", String(200), unique=True, nullable=True)
 
     def __init__(self, username=None, password=None):
         self.username = username
@@ -32,14 +33,17 @@ class User(Base):
         s = Serializer(config.SECRET_KEY, expires_in=config.TOKEN_EXPIRATION_TIME)
         return s.dumps({'id': self.id})
 
-    def attach_new_socket(self, sid):
-        self.socket_id = sid
+    def attach_new_socket(self, sid, is_form_source):
+        if is_form_source:
+            self.socket_id_as_source = sid
+        else:
+            self.socket_id_as_explorer = sid
 
     @staticmethod
     def get_user_by_auth_token(token):
-        s = Serializer(config.SECRET_KEY)
+        s = Serializer(config.SECRET_KEY, expires_in=config.TOKEN_EXPIRATION_TIME)
         try:
-            data = s.loads(token)
+            data = s.loads(str(token))
         except SignatureExpired:
             return None  # valid token, but expired
         except BadSignature:

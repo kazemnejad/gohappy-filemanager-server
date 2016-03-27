@@ -1,9 +1,10 @@
 <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
 <script type="text/javascript" charset="utf-8">
-    var socket = io.connect('http://amirhosein.me:5000');
+    var socket = io.connect('http://localhost:5000');
 
     socket.on('connect', function () {
         console.log("connected");
+	socket.emit("ask_for_new_connection", {token: 'eyJhbGciOiJIUzI1NiIsImV4cCI6MTQ3MTk2MjA0MiwiaWF0IjoxNDU5MDAyMDQyfQ.eyJpZCI6Mn0.WQ4PWpceAFYzUDV0-Ru1k5jkumq5Ra2dBbi1gnee9ic'});
     });
 
     socket.on('khar', function () {
@@ -11,8 +12,13 @@
     });
 
     socket.on('new_connection_established', function (data) {
+	console.log('new connection established')
         console.log(data.result)
     });
+
+    socket.on('start_new_exploration_result', function (data) {
+	console.log(data)
+	});
 	
     socket.on('salam', function () {
         console.log("salam!!!!!!!!!!!!!")
